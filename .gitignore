@@ -9,7 +9,6 @@ __pycache__/
 *.so
 
 # Distribution / packaging
-.api_token.py
 .Python
 build/
 develop-eggs/
