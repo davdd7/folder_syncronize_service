@@ -10,16 +10,33 @@ class LocalManager:
     # Путь на локальном диске
     local_folder = Path.home() / "Desktop" / "SyncFolder"
 
-    def detail(self):
+    def dir_file_names(self):
         dir_files_list = []
         with os.scandir(self.local_folder) as it:
             for fi in it:
                 file_name = fi.name
+                if file_name.startswith("~$"):
+                    continue
                 dir_files_list.append(file_name)
         return dir_files_list
 
+    def get_info(self):
+        dir_files_info = {}
+        with os.scandir(self.local_folder) as it:
+            for fi in it:
+                file_name = fi.name
+                if file_name.startswith("~$"):
+                    continue
+                dir_files_info[file_name] = {
+                    "size": os.path.getsize(self.local_folder / file_name),
+                    "m_time": os.path.getmtime(self.local_folder / file_name),
+                }
+        return dir_files_info
 
-class SyncManager:
+
+
+
+class YandexAPIManager:
     # Хедеры для отправки
     YA_TOKEN = TOKEN
     ya_headers = {
@@ -107,7 +124,7 @@ class SyncManager:
         else:
             print(f"error message: {response.json().get('message')}")
 
-    def detail(self):
+    def detail(self, json_t=False):
         """
         Список файлов яндекса
         :return:
@@ -122,9 +139,20 @@ class SyncManager:
         yandex_files_list = []
         items = response.json().get("_embedded").get("items")
 
-        print(response.json())
+        if json_t:
+            jsonify_data = {}
+            for item in items:
+                jsonify_data[item["name"]] = {
+                    "m_time": item["modified"],
+                    "size": item["size"],
+                }
+            return jsonify_data
 
         for item in items:
             yandex_files_list.append(item.get("name"))
 
         return yandex_files_list
+
+
+# modified
+# size

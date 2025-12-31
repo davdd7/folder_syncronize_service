@@ -3,179 +3,111 @@ from pathlib import Path
 import time
 import threading
 
-from managers import SyncManager, LocalManager
-from services import check_diff, write_new_files_data, delete_files_data
+from db_work import DBManager
+from managers import YandexAPIManager, LocalManager
+from services import SyncService
 
 home = Path.home()
 folder = home / "Desktop" / "SyncFolder"
 
-# это меняется на БД
-base_list = []
-
-files_info_new = {}
-
-# Пример хранения
-m = {
-    "file_name":
-        {
-        "file_size": 123,
-        "file_mtime": 321,
-        },
-}
-
-# headers
-#
-# headers = {
-#     "Authorization": f"OAuth {TOKEN}",
-#     "Accept": "application/json",
-#     "Content-Type": "application/json"
-# }
-#
-# disk_path = {
-#     "path": "/sync_folder"
-# }
-#
-#
-#
-#
-# def get_yandex_files_list():
-#     response = requests.get(
-#         "https://cloud-api.yandex.net/v1/disk/resources",
-#         headers=headers,
-#         params={
-#             "path": "/sync_folder"
-#         }
-#     )
-#     yandex_files_list = []
-#     items = response.json().get("_embedded").get("items")
-#
-#     for item in items:
-#         yandex_files_list.append(item.get("name"))
-#
-#     return yandex_files_list
-
-
-# def get_dir_files_names():
-#     dir_files_list = []
-#     with os.scandir(folder) as it:
-#         for fi in it:
-#             file_name = fi.name
-#             dir_files_list.append(file_name)
-#     return dir_files_list
-
-
-# def create_yandex_folder():
-#         response = requests.put(
-#             "https://cloud-api.yandex.net/v1/disk/resources",
-#             headers=headers,
-#             params=disk_path,
-#         )
-#
-#         if response.status_code == [201, 409]:
-#             return True
-#         else:
-#             print(f"Status code: {response.status_code}")
-#             print(f"Message: {response.json().get('message')}")
-#
-#
-# def upload_file(fi_name):
-#     response = requests.get(
-#         "https://cloud-api.yandex.net/v1/disk/resources/upload",
-#         headers=headers,
-#         params={
-#             "path": f"/sync_folder/{fi_name}",
-#             "overwrite": "true",
-#         },
-#     )
-#
-#     if response.status_code != 200:
-#         return
-#
-#     href = response.json().get("href")
-#
-#     with open(folder / fi_name, "rb") as f:
-#         upload_response = requests.put(
-#             href,
-#             files={
-#                 "file": f,
-#             },
-#         )
-#
-#         if upload_response.status_code == 201:
-#             print(f"Файл {fi_name!r} загружен")
-#         else:
-#             print(f"Ошибка {upload_response.json().get('message')}")
-#
-#
-# def delete_file(fi_name):
-#     response = requests.delete(
-#         "https://cloud-api.yandex.net/v1/disk/resources",
-#         headers=headers,
-#         params={
-#             "path": f"/sync_folder/{fi_name}",
-#             "permanently": "true",
-#             "force_async": "true",
-#         },
-#     )
-#
-#     if response.status_code == 204:
-#         print(f"УСПЕШНО УДАЛЯЕТСЯ С ДИСКА {fi_name}")
-#     else:
-#         print(f"error message: {response.json().get('message')}")
-#
-#
-# def is_file_changed(fi_name):
-#
-#     # file_path = folder / fi_name
-#     # new_size = os.path.getsize(file_path)
-#     # new_mtime = os.path.getmtime(file_path)
-#     #
-#     # # ЛОГИКА НА JSON ОБЪЕКТЕ, ИСПРАВИТЬ НА SQL
-#     # json_data = json_list.get(fi_name)
-#     # file_size = json_data.get("file_size")
-#     # file_mtime = json_data.get("file_mtime")
-#     pass
-
-# СЛЕДУЮЩИЕ 4 ФУНКЦИИ ДЛЯ РАБОТЫ С ЗАПИСЬЮ И УДАЛЕНИЕМ ИЗ БД
 
 
 if __name__ == "__main__":
     if not os.path.exists(folder):
         os.mkdir(path=folder)
-    yandex_manager = SyncManager()
+    count = 0
+    yandex_manager = YandexAPIManager()
     yandex_manager.create_folder()
     local_manager = LocalManager()
+    db_manager = DBManager()
+    sync_service = SyncService()
 
-    check_diff(yandex_manager, local_manager)
+    db_manager.create_tables()
+
+    sync_service.check_starter_diff()
 
     while True:
-        new_files_list = local_manager.detail()
-        # Запихнуть в отдельную функцию
+        count += 1
+        if count > 3:
+            count = 0
+            db_info = db_manager.get_info()
+            db_names_list = db_info.keys()
+            ya_info = yandex_manager.detail(json_t=True)
+            ya_names_list = ya_info.keys()
 
-        old_set = set(base_list)
-        new_set = set(new_files_list)
+            db_set = set(db_names_list)
+            ya_set = set(ya_names_list
+                         )
+            added_list = list(db_set - ya_set)
+            deleted_list = list(ya_set - db_set)
+            unchanged_list = list(ya_set & db_set)
 
-        added_list = list(new_set - old_set)
-        deleted_list = list(old_set - new_set)
-        unchanged_list = list(new_set & old_set)
+        else:
 
-        base_list = added_list + unchanged_list
+            new_files_list = local_manager.dir_file_names()
+            old_names_list = db_manager.get_file_names()
+            # Запихнуть в отдельную функцию
+            db_info = db_manager.get_info()
+            local_info = local_manager.get_info()
+            old_set = set(old_names_list)
+            new_set = set(new_files_list)
 
-        flag = True
+            added_list = list(new_set - old_set)
+            deleted_list = list(old_set - new_set)
+            unchanged_list = list(new_set & old_set)
 
-        if len(added_list) != 0:
-            print(f"Добавлены: {added_list}")
-            add_thread = threading.Thread(target=write_new_files_data, args=(yandex_manager, added_list,), daemon=True)
-            add_thread.start()
-            flag = False
+            # Здесь проверяем изменения в неизмененных названиях файлов
 
-        if len(deleted_list) != 0:
-            print(f"Удалены: {deleted_list}")
-            del_thread = threading.Thread(target=delete_files_data, args=(yandex_manager, deleted_list,), daemon=True)
-            del_thread.start()
-            flag = False
+            flag = True
 
-        if flag:
-            print("Изменений нет!")
+            if added_list:
+                # логирование
+                for al in added_list:
+                    db_manager.write_file_data(al)
+                    add_thread = threading.Thread(
+                        target=yandex_manager.load,
+                        args=(al, ),
+                        daemon=True,
+                    )
+                    add_thread.start()
+                flag = False
 
-        time.sleep(5)
+            if deleted_list:
+                # Логирование
+                for dl in deleted_list:
+                    db_manager.delete_file_data(dl)
+                    del_thread = threading.Thread(
+                        target=yandex_manager.delete,
+                        args=(dl, ),
+                        daemon=True,
+                    )
+                    del_thread.start()
+                flag = False
+
+            if unchanged_list:
+                # Логирование?
+                changed_list = []
+                for file_name in unchanged_list:
+
+                    if db_info[file_name] != local_info[file_name]:
+                        changed_list.append(file_name)
+
+                if changed_list:
+                    for cl in changed_list:
+                        db_manager.write_file_data(cl)
+                        add_thread = threading.Thread(
+                            target=yandex_manager.load,
+                            args=(cl,),
+                            daemon=True,
+                        )
+                        add_thread.start()
+
+                    print(f"Внёс изменения в файлы {changed_list}")
+
+                    flag = False
+
+            # НЕ УЧТЕНО ЕСЛИ ФАЙЛ ОТКРЫТ В ЯНДЕКСЕ! ВЫДАЕТ ОШИБКИ!
+            # НУЖН СТАВИТЬ ПЕРЕЗАПУСК ФУНКЦИИ И КАЖДЫЕ 20 СЕКУНД СРАВНИВАТЬ С ДИСКОМ! АКТУАЛЬНОСТЬ ДАННЫХ СВЕРЯТЬ С БД
+            if flag:
+                print("Изменений нет!")
+            time.sleep(5)
