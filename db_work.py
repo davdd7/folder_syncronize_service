@@ -2,11 +2,14 @@ import os
 from pathlib import Path
 import sqlite3
 
+from managers import LocalManager
+
 # Добавить логирование
 
 class DBManager:
-    folder = Path.home() / "Desktop" / "SyncFolder"
+    local_folder = Path.home() / "Desktop" / "SyncFolder"
     database_name = "database.db"
+
 
     def _execution_function(self, query: str, parameters = (), fetch=False, fetch_names=False):
         with sqlite3.connect(self.database_name) as conn:
@@ -19,7 +22,8 @@ class DBManager:
                 if result:
                     return {dict(row)["name"]: {
                         "size": dict(row)["size"],
-                        "m_time": dict(row)["m_time"]
+                        "m_time": dict(row)["m_time"],
+                        "md_5": dict(row)["md_5"],
                     } for row in result}
                 else:
                     return {}
@@ -39,18 +43,19 @@ class DBManager:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL UNIQUE,
             m_time REAL NOT NULL,
-            size INTEGER NOT NULL
-            
+            size INTEGER NOT NULL,
+            md_5 TEXT NOT NULL
         )''')
 
-    def write_file_data(self, fi_name):
-        query = '''INSERT OR REPLACE INTO local (name, m_time, size)
-        VALUES (?, ?, ?)'''
-        file_path = self.folder / fi_name
+    def write_file_data(self, file_name, file_data):
+        query = '''INSERT OR REPLACE INTO local (name, m_time, size, md_5)
+        VALUES (?, ?, ?, ?)'''
+
         parameters = (
-            fi_name,
-            os.path.getmtime(file_path),
-            os.path.getsize(file_path),
+            file_name,
+            file_data.get("m_time"),
+            file_data.get("size"),
+            file_data.get("md_5"),
         )
 
         self._execution_function(query, parameters)
