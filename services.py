@@ -5,11 +5,26 @@ from managers import YandexAPIManager, LocalManager
 from db_work import DBManager
 
 import threading
+import configparser
+
+configparser.ConfigParser()
 
 class SyncService:
-    yandex_manager = YandexAPIManager()
-    db_manager = DBManager()
-    local_manager = LocalManager()
+
+    def __init__(self, config_file_path):
+        cfg = configparser.ConfigParser()
+        cfg.read(config_file_path)
+
+        self.db_manager = DBManager(database_name=cfg["database"]["name"])
+        self.local_manager = LocalManager(
+            local_folder=cfg["local_data"]["local_folder"],
+            buffer_size=cfg["local_data"]["buffer_size"],
+        )
+        self.yandex_manager = YandexAPIManager(
+            token=cfg["yandex_data"]["token"],
+            disk_folder=cfg["yandex_data"]["disk_folder"],
+            local_folder=cfg["local_data"]["local_folder"],
+        )
 
     def _starting(self):
         self.local_manager.create_local_folder()

@@ -4,12 +4,12 @@ import hashlib
 
 import requests
 
-from config import TOKEN
-
 
 class LocalManager:
-    # Путь на локальном диске
-    local_folder = Path.home() / "Desktop" / "SyncFolder"
+
+    def __init__(self, local_folder, buffer_size):
+        self.local_folder = Path.home() / local_folder
+        self.buffer_size = int(buffer_size)
 
     def dir_file_names(self):
         dir_files_list = []
@@ -44,11 +44,11 @@ class LocalManager:
         if not os.path.exists(self.local_folder):
             os.mkdir(path=self.local_folder)
 
-    def _get_hash(self, file_name, buffer_size = 65536):
+    def _get_hash(self, file_name):
         md5_hash = hashlib.md5()
 
         with open(self.local_folder / file_name, "rb") as fi:
-            while chunk := fi.read(buffer_size):
+            while chunk := fi.read(self.buffer_size):
                 md5_hash.update(chunk)
             return md5_hash.hexdigest()
 
@@ -58,16 +58,14 @@ class LocalManager:
 
 class YandexAPIManager:
     # Хедеры для отправки
-    YA_TOKEN = TOKEN
-    ya_headers = {
-        "Authorization": f"OAuth {YA_TOKEN}",
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-    # Путь до диска на облачном сервисе
-    ya_disk_path = "/sync_folder"
-    # Путь на локальном диске
-    local_folder = Path.home() / "Desktop" / "SyncFolder"
+    def __init__(self, token, disk_folder, local_folder):
+        self.ya_headers = {
+            "Authorization": f"OAuth {token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+        self.ya_disk_path = disk_folder
+        self.local_folder = Path.home() / local_folder
 
     def create_folder(self):
         """

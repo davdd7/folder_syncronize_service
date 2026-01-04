@@ -1,15 +1,11 @@
-import os
-from pathlib import Path
 import sqlite3
-
-from managers import LocalManager
 
 # Добавить логирование
 
 class DBManager:
-    local_folder = Path.home() / "Desktop" / "SyncFolder"
-    database_name = "database.db"
 
+    def __init__(self, database_name):
+        self.database_name = database_name
 
     def _execution_function(self, query: str, parameters = (), fetch=False, fetch_names=False):
         with sqlite3.connect(self.database_name) as conn:
