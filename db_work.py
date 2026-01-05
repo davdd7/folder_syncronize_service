@@ -4,7 +4,8 @@ import sqlite3
 
 class DBManager:
 
-    def __init__(self, database_name):
+    def __init__(self, database_name, logger):
+        self.logger = logger
         self.database_name = database_name
 
     def _execution_function(self, query: str, parameters = (), fetch=False, fetch_names=False):

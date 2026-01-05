@@ -1,3 +1,4 @@
 .config.ini
 database.db
 .venv
+*sync.log

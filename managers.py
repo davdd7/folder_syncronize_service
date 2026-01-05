@@ -7,7 +7,8 @@ import requests
 
 class LocalManager:
 
-    def __init__(self, local_folder, buffer_size):
+    def __init__(self, local_folder, buffer_size, logger):
+        self.logger = logger
         self.local_folder = Path.home() / local_folder
         self.buffer_size = int(buffer_size)
 
@@ -58,7 +59,8 @@ class LocalManager:
 
 class YandexAPIManager:
     # Хедеры для отправки
-    def __init__(self, token, disk_folder, local_folder):
+    def __init__(self, token, disk_folder, local_folder, logger):
+        self.logger = logger
         self.ya_headers = {
             "Authorization": f"OAuth {token}",
             "Accept": "application/json",
