@@ -12,6 +12,9 @@ class LocalManager:
     def __init__(self, local_folder: str, buffer_size: str, file_size_limit: str, logger: Logger):
         self.logger = logger
         self.local_folder = Path.home() / local_folder
+        self.logger.info(
+            msg="Расположение папки для синхронизации: {}".format(self.local_folder)
+        )
         self.buffer_size = int(buffer_size)
         self.file_size_limit = int(file_size_limit)
 

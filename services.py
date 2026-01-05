@@ -1,7 +1,6 @@
 import time
-from logging import Logger
 from typing import List, Dict
-from venv import logger
+from logging import Logger
 
 from managers import YandexAPIManager, LocalManager
 from db_work import DBManager
@@ -92,7 +91,7 @@ class SyncService:
             self.local_manager.create_local_folder()
             self.yandex_manager.create_folder()
             self.db_manager.create_tables()
-            logger.warning("Хранилища и БД созданы!")
+            self.sync_logger.warning("Приложение запущено!")
 
             yandex_list, yandex_json_detail = self.yandex_manager.detail()
             files_dir_list = self.local_manager.dir_file_names()
