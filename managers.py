@@ -1,19 +1,25 @@
+from logging import Logger
 from pathlib import Path
 import os
 import hashlib
+from typing import List, Dict, Tuple
 
 import requests
 
 
 class LocalManager:
 
-    def __init__(self, local_folder, buffer_size, file_size_limit, logger):
+    def __init__(self, local_folder: str, buffer_size: str, file_size_limit: str, logger: Logger):
         self.logger = logger
         self.local_folder = Path.home() / local_folder
         self.buffer_size = int(buffer_size)
         self.file_size_limit = int(file_size_limit)
 
-    def dir_file_names(self):
+    def dir_file_names(self) -> List:
+        """
+        Получение списка имен и проверка файлов в директории
+        :return: список
+        """
         dir_files_list = []
         try:
             with os.scandir(self.local_folder) as it:
@@ -50,7 +56,12 @@ class LocalManager:
             raise
 
 
-    def get_info(self, file_name_list):
+    def get_info(self, file_name_list: List) -> Dict:
+        """
+        Выдаёт информацию по файлам из списка
+        :param file_name_list: Список файлов директории
+        :return: данные по файлам
+        """
         dir_files_info = {}
 
         for file_name in file_name_list:
@@ -69,7 +80,12 @@ class LocalManager:
 
         return dir_files_info
 
-    def delete_file(self, file_name):
+    def delete_file(self, file_name: str) -> None:
+        """
+        Удаление файла
+        :param file_name: имя удаляемого файла
+        :return: None
+        """
         try:
             if os.path.exists(self.local_folder / file_name):
                 os.remove(self.local_folder / file_name)
@@ -81,7 +97,11 @@ class LocalManager:
                 msg="ERROR! Файл {} не удалён! {}".format(file_name, e)
             )
 
-    def create_local_folder(self):
+    def create_local_folder(self) -> None:
+        """
+        Создание локальной папки
+        :return: None
+        """
         try:
             if not os.path.exists(self.local_folder):
                 os.mkdir(path=self.local_folder)
@@ -91,7 +111,12 @@ class LocalManager:
             )
             raise
 
-    def _get_hash(self, file_name):
+    def _get_hash(self, file_name: str) -> str:
+        """
+        Получение хеша файла
+        :param file_name: имя файла для получения хеша
+        :return: хеш файла
+        """
         md5_hash = hashlib.md5()
         try:
             with open(self.local_folder / file_name, "rb") as fi:
@@ -105,12 +130,9 @@ class LocalManager:
             raise
 
 
-
-
-
 class YandexAPIManager:
     # Хедеры для отправки
-    def __init__(self, token, disk_folder, local_folder, file_size_limit, logger):
+    def __init__(self, token: str, disk_folder: str, local_folder: str, file_size_limit: str, logger: Logger):
         self.logger = logger
         self.ya_headers = {
             "Authorization": f"OAuth {token}",
@@ -121,10 +143,10 @@ class YandexAPIManager:
         self.file_size_limit = int(file_size_limit)
         self.local_folder = Path.home() / local_folder
 
-    def create_folder(self):
+    def create_folder(self) -> None:
         """
         Создание папки на диске
-        :return:
+        :return: None
         """
         response = requests.put(
             "https://cloud-api.yandex.net/v1/disk/resources",
@@ -154,11 +176,11 @@ class YandexAPIManager:
             )
             raise
 
-    def load_to_disk(self, file_name):
+    def load_to_disk(self, file_name: str) -> None:
         """
         Загрузка файлов на диск
-        :param file_name:
-        :return:
+        :param file_name: имя файла
+        :return: None
         """
         response = requests.get(
             "https://cloud-api.yandex.net/v1/disk/resources/upload",
@@ -212,7 +234,12 @@ class YandexAPIManager:
             )
             raise
 
-    def load_from_disk(self, file_name):
+    def load_from_disk(self, file_name: str) -> None:
+        """
+        Скачивание файла с диска
+        :param file_name: имя файла
+        :return: None
+        """
 
         response = requests.get(
             "https://cloud-api.yandex.net/v1/disk/resources/download",
@@ -251,11 +278,11 @@ class YandexAPIManager:
             )
             raise
 
-    def delete(self, file_name):
+    def delete(self, file_name) -> None:
         """
         Удаление файла с облачного диска
-        :param file_name:
-        :return:
+        :param file_name: имя удаляемого файла с диска
+        :return: None
         """
         response = requests.delete(
             "https://cloud-api.yandex.net/v1/disk/resources",
@@ -284,10 +311,10 @@ class YandexAPIManager:
             )
             raise
 
-    def detail(self):
+    def detail(self) -> Tuple:
         """
-        Список файлов яндекса
-        :return:
+        Получение списка имён и информации файлов в диске
+        :return: список и детализацию
         """
 
         response = requests.get(

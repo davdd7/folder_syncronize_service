@@ -1,5 +1,5 @@
 import time
-from functools import wraps
+from logging import Logger
 from typing import List, Dict
 from venv import logger
 
@@ -13,7 +13,11 @@ import datetime
 import sys
 
 
-def setup_logger():
+def setup_logger() -> Logger:
+    """
+    Функция создания логгера
+    :return: логгер
+    """
     some_logger = logging.getLogger("SyncService")
 
     some_logger.setLevel(level=logging.DEBUG)
@@ -49,28 +53,41 @@ def setup_logger():
 
 class SyncService:
 
-    def __init__(self, config_file_path):
-        self.sync_logger = setup_logger()
+    def __init__(self, config_file_path: str):
+        try:
+            self.sync_logger = setup_logger()
 
-        cfg = configparser.ConfigParser()
-        cfg.read(config_file_path)
+            cfg = configparser.ConfigParser()
+            cfg.read(config_file_path)
 
-        self.db_manager = DBManager(database_name=cfg["database"]["name"], logger=self.sync_logger)
-        self.local_manager = LocalManager(
-            local_folder=cfg["local_data"]["local_folder"],
-            buffer_size=cfg["local_data"]["buffer_size"],
-            file_size_limit=cfg["local_data"]["file_size_limit"],
-            logger=self.sync_logger,
-        )
-        self.yandex_manager = YandexAPIManager(
-            token=cfg["yandex_data"]["token"],
-            disk_folder=cfg["yandex_data"]["disk_folder"],
-            local_folder=cfg["local_data"]["local_folder"],
-            file_size_limit=cfg["local_data"]["file_size_limit"],
-            logger=self.sync_logger,
-        )
+            self.db_manager = DBManager(database_name=cfg["database"]["name"], logger=self.sync_logger)
+            self.local_manager = LocalManager(
+                local_folder=cfg["local_data"]["local_folder"],
+                buffer_size=cfg["local_data"]["buffer_size"],
+                file_size_limit=cfg["local_data"]["file_size_limit"],
+                logger=self.sync_logger,
+            )
+            self.yandex_manager = YandexAPIManager(
+                token=cfg["yandex_data"]["token"],
+                disk_folder=cfg["yandex_data"]["disk_folder"],
+                local_folder=cfg["local_data"]["local_folder"],
+                file_size_limit=cfg["local_data"]["file_size_limit"],
+                logger=self.sync_logger,
+            )
+        except Exception as e:
+            self.sync_logger.error(
+                msg="Не удается инициализировать синхронизатор! {}".format(e)
+            )
+            raise
 
-    def _starting(self):
+    def _starting(self) -> None:
+        """
+        Стартовая функция. Запускается при старте приложения.
+        - Проверяет разницу между локальным диском и диском яндекса
+        - Запрашивает у пользователя, что является наиболее актуальным
+        - По ответу пользователя вносит изменения
+        :return: None
+        """
         try:
             self.local_manager.create_local_folder()
             self.yandex_manager.create_folder()
@@ -167,15 +184,22 @@ class SyncService:
             self.sync_logger.error(msg="ERROR! {}". format(e))
             raise
 
-
-
     def _check_differences(
             self,
             new_names_list: List,
             new_info_dict: Dict,
             old_names_list: List,
             old_info_dict: Dict,
-            md5_check=False):
+            md5_check: bool = False) -> None:
+        """
+        Функция проверки изменений
+        :param new_names_list: имена актуальных файлов
+        :param new_info_dict: информация по актуальным файлам
+        :param old_names_list: имена файлов, которые хранятся
+        :param old_info_dict: информация по хранящимся файлам
+        :param md5_check: требуется ли проверка по хешу - только для сверки с яндексом
+        :return: None
+        """
 
         old_set = set(old_names_list)
         new_set = set(new_names_list)
@@ -254,7 +278,11 @@ class SyncService:
             raise
 
 
-    def run(self):
+    def run(self) -> None:
+        """
+        Функция запуска приложения
+        :return: None
+        """
         try:
             self._starting()
             count = 0
