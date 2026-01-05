@@ -3,3 +3,4 @@ database.db
 .venv
 *sync.log
 .idea
+__pycache__
