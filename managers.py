@@ -7,51 +7,102 @@ import requests
 
 class LocalManager:
 
-    def __init__(self, local_folder, buffer_size, logger):
+    def __init__(self, local_folder, buffer_size, file_size_limit, logger):
         self.logger = logger
         self.local_folder = Path.home() / local_folder
         self.buffer_size = int(buffer_size)
+        self.file_size_limit = int(file_size_limit)
 
     def dir_file_names(self):
         dir_files_list = []
-        with os.scandir(self.local_folder) as it:
-            for fi in it:
-                file_name = fi.name
-                if file_name.startswith("~$"):
-                    continue
-                dir_files_list.append(file_name)
-        return dir_files_list
+        try:
+            with os.scandir(self.local_folder) as it:
+                for fi in it:
+                    # Если папка - нужно пропустить
+                    if fi.is_dir():
+                        self.logger.warning(
+                            msg="{!r} - папка. Не будет загружена!".format(fi.name),
+                        )
+                        continue
+                    file_name = fi.name
+                    # Если файл открыт - пропустить
+                    if file_name.startswith("~$"):
+                        continue
+                    file_size = os.path.getsize(self.local_folder / file_name)
+                    # Если больше лимита - пропустить
+                    if file_size > self.file_size_limit:
+                        self.logger.warning(
+                            msg="Вес файла {!r} - {:.2f}Мб больше допустимых {:.2f}Мб! Он не будет загружен!"
+                            .format(
+                                file_name,
+                                file_size / 1024 / 1024,
+                                self.file_size_limit /1024 /1024,
+                            )
+                        )
+                        continue
 
-    def get_info(self):
+                    dir_files_list.append(file_name)
+            return dir_files_list
+        except Exception as e:
+            self.logger.error(
+                msg="ERROR! {}".format(e),
+            )
+            raise
+
+
+    def get_info(self, file_name_list):
         dir_files_info = {}
-        with os.scandir(self.local_folder) as it:
-            for fi in it:
-                file_name = fi.name
-                if file_name.startswith("~$"):
-                    continue
+
+        for file_name in file_name_list:
+            try:
                 dir_files_info[file_name] = {
                     "size": os.path.getsize(self.local_folder / file_name),
                     "m_time": os.path.getmtime(self.local_folder / file_name),
                     "md_5": self._get_hash(file_name),
                 }
+            except Exception as e:
+                self.logger.error(
+                    msg="Не удается получить доступ к файлу {}! ERROR! {}"
+                    .format(file_name, e)
+                )
+                continue
+
         return dir_files_info
 
     def delete_file(self, file_name):
-        # Может быть проблема с доступом к файлу
-        if os.path.exists(self.local_folder / file_name):
-            os.remove(self.local_folder / file_name)
+        try:
+            if os.path.exists(self.local_folder / file_name):
+                os.remove(self.local_folder / file_name)
+            self.logger.info(
+                msg="Файл {} удалён!".format(file_name)
+            )
+        except Exception as e:
+            self.logger.error(
+                msg="ERROR! Файл {} не удалён! {}".format(file_name, e)
+            )
 
     def create_local_folder(self):
-        if not os.path.exists(self.local_folder):
-            os.mkdir(path=self.local_folder)
+        try:
+            if not os.path.exists(self.local_folder):
+                os.mkdir(path=self.local_folder)
+        except Exception as e:
+            self.logger.error(
+                msg="ERROR! Локальная папка не создана! {}".format(e)
+            )
+            raise
 
     def _get_hash(self, file_name):
         md5_hash = hashlib.md5()
-
-        with open(self.local_folder / file_name, "rb") as fi:
-            while chunk := fi.read(self.buffer_size):
-                md5_hash.update(chunk)
-            return md5_hash.hexdigest()
+        try:
+            with open(self.local_folder / file_name, "rb") as fi:
+                while chunk := fi.read(self.buffer_size):
+                    md5_hash.update(chunk)
+                return md5_hash.hexdigest()
+        except Exception as e:
+            self.logger.error(
+                msg="Не удается получить доступ к файлу {}!".format(e)
+            )
+            raise
 
 
 
@@ -59,7 +110,7 @@ class LocalManager:
 
 class YandexAPIManager:
     # Хедеры для отправки
-    def __init__(self, token, disk_folder, local_folder, logger):
+    def __init__(self, token, disk_folder, local_folder, file_size_limit, logger):
         self.logger = logger
         self.ya_headers = {
             "Authorization": f"OAuth {token}",
@@ -67,6 +118,7 @@ class YandexAPIManager:
             "Content-Type": "application/json"
         }
         self.ya_disk_path = disk_folder
+        self.file_size_limit = int(file_size_limit)
         self.local_folder = Path.home() / local_folder
 
     def create_folder(self):
@@ -82,13 +134,25 @@ class YandexAPIManager:
             },
         )
 
-        if response.status_code == [201, 409]:
-            return True
+        resp_st_code = response.status_code
+
+        if resp_st_code == 201:
+            self.logger.info(
+                msg="Создана папка в облаке {}".format(self.ya_disk_path)
+            )
+        elif resp_st_code == 409:
+            self.logger.info(
+                msg="В облаке уже существует папка {}".format(self.ya_disk_path)
+            )
         else:
             # Сделать логирование
-            print(f"Status code: {response.status_code}")
-            print(f"Message: {response.json().get('message')}")
-            return False
+            self.logger.error(
+                msg="ERROR! Status code: {}. Message: {}".format(
+                    resp_st_code,
+                    response.json().get('message'),
+                ),
+            )
+            raise
 
     def load_to_disk(self, file_name):
         """
@@ -106,25 +170,50 @@ class YandexAPIManager:
         )
 
         if response.status_code != 200:
-            return
+            self.logger.error(
+                msg="Не удается загрузить файл {!r}.Message: {}"
+                .format(
+                    file_name,
+                    response.json().get("message"),
+                ),
+            )
+            raise
 
         href = response.json().get("href")
-
-        with open(self.local_folder / file_name, "rb") as f:
-            upload_response = requests.put(
-                href,
-                files={
-                    "file": f,
-                },
+        try:
+            with open(self.local_folder / file_name, "rb") as f:
+                upload_response = requests.put(
+                    href,
+                    files={
+                        "file": f,
+                    },
+                )
+                # Тоже добавить логи
+                if upload_response.status_code == 201:
+                    self.logger.info(
+                        msg="Файл {!r} загружен".format(file_name)
+                    )
+                else:
+                    self.logger.error(
+                        msg="Не удается загрузить файл {!r}.Message: {}"
+                        .format(
+                            file_name,
+                            response.json().get("message"),
+                        ),
+                    )
+                    raise
+        except:
+            self.logger.error(
+                msg="Не удается загрузить файл {!r}.Message: {}"
+                .format(
+                    file_name,
+                    response.json().get("message"),
+                ),
             )
-            # Тоже добавить логи
-            if upload_response.status_code == 201:
-                print(f"Файл {file_name!r} загружен")
-            else:
-                print(f"Ошибка {upload_response.json().get('message')}")
+            raise
 
     def load_from_disk(self, file_name):
-        print(f"НАЧИНАЕТСЯ АГРУЗКА ФАЙЛА С ДИСКА!!! {file_name}")
+
         response = requests.get(
             "https://cloud-api.yandex.net/v1/disk/resources/download",
             headers=self.ya_headers,
@@ -132,20 +221,35 @@ class YandexAPIManager:
                 "path": f"{self.ya_disk_path}/{file_name}",
             },
         )
-        print(f"RESPONSE STATUS CODE! {response.status_code}")
 
         if response.status_code != 200:
-            print(f"ERRORRR!!! {response.json()}")
-            return
+            self.logger.error(
+                msg="Не удается загрузить файл {!r}.Message: {}"
+                .format(
+                    file_name,
+                    response.json().get("message"),
+                ),
+            )
+            raise
 
         href = response.json().get("href")
-        print(f"ПОЛУЧИЛ ССЫЛКУ ДЛЯ ЗАГРУЗКИ {href}")
-        with requests.get(href, stream=True) as file_response:
-            print(f"Начинается загрузка {file_response.content}")
+        try:
+            with requests.get(href, stream=True) as file_response:
 
-            with open(self.local_folder / file_name, "wb") as fi:
-                for chunk in file_response.iter_content(chunk_size=8192):
-                    fi.write(chunk)
+
+                with open(self.local_folder / file_name, "wb") as fi:
+                    for chunk in file_response.iter_content(chunk_size=8192):
+                        fi.write(chunk)
+            self.logger.info(
+                msg="Файл {!r} успешно скачан!".format(file_name),
+            )
+        except Exception as e:
+            self.logger.error(
+                msg="Не удается скачать файл {!r}.Message: {}"
+                .format(file_name, e)
+
+            )
+            raise
 
     def delete(self, file_name):
         """
@@ -164,15 +268,28 @@ class YandexAPIManager:
         )
 
         if response.status_code == 204:
-            print(f"УСПЕШНО УДАЛЯЕТСЯ С ДИСКА {file_name}")
+            self.logger.info(
+                msg="Файл {!r} успешно удален из облака".format(file_name),
+            )
+        elif response.status_code == 202:
+            self.logger.info(
+                msg="Начинается удаление файла с облака {!r}".format(file_name),
+            )
         else:
-            print(f"error message: {response.json().get('message')}")
+            self.logger.error(
+                msg="Файл не удается удалить! StatusCode: {} Message: {}"
+                .format(response.status_code,
+                        response.json().get('message'),
+                ),
+            )
+            raise
 
-    def detail(self, json_t=False):
+    def detail(self):
         """
         Список файлов яндекса
         :return:
         """
+
         response = requests.get(
             "https://cloud-api.yandex.net/v1/disk/resources",
             headers=self.ya_headers,
@@ -180,25 +297,29 @@ class YandexAPIManager:
                 "path": self.ya_disk_path
             }
         )
-        yandex_files_list = []
+        if response.status_code != 200:
+            self.logger.error(
+                msg="Нет доступа к серверу! message: {}".format(response.json().get("message"))
+            )
+            raise
         items = response.json().get("_embedded").get("items")
-        print(f"ИТЕМЫ В ЯНДЕКСЕ: {items}")
 
-        if json_t:
-            jsonify_data = {}
-            for item in items:
-                jsonify_data[item["name"]] = {
-                    "m_time": item.get("modified"),
-                    "size": item.get("size"),
-                    "md_5": item.get("md5"),
-                }
-            return jsonify_data
-
+        yandex_files_list = []
+        jsonify_data = {}
         for item in items:
-            yandex_files_list.append(item.get("name"))
+            name = item.get("name")
+            size = item.get("size")
+            if size > int(self.file_size_limit):
+                self.logger.warning(
+                    msg="Вес {!r} {:.2f} Мб. Допустимый - {:.2f}. Он не будет скачан. "
+                )
+                continue
+            jsonify_data[name] = {
+                "m_time": item.get("modified"),
+                "size": size,
+                "md_5": item.get("md5"),
+            }
+            yandex_files_list.append(name)
 
-        return yandex_files_list
 
-
-# modified
-# size
+        return yandex_files_list, jsonify_data

@@ -1,4 +1,5 @@
 import time
+from functools import wraps
 from typing import List, Dict
 from venv import logger
 
@@ -58,12 +59,14 @@ class SyncService:
         self.local_manager = LocalManager(
             local_folder=cfg["local_data"]["local_folder"],
             buffer_size=cfg["local_data"]["buffer_size"],
+            file_size_limit=cfg["local_data"]["file_size_limit"],
             logger=self.sync_logger,
         )
         self.yandex_manager = YandexAPIManager(
             token=cfg["yandex_data"]["token"],
             disk_folder=cfg["yandex_data"]["disk_folder"],
             local_folder=cfg["local_data"]["local_folder"],
+            file_size_limit=cfg["local_data"]["file_size_limit"],
             logger=self.sync_logger,
         )
 
@@ -74,10 +77,9 @@ class SyncService:
             self.db_manager.create_tables()
             logger.warning("Хранилища и БД созданы!")
 
-            yandex_list = self.yandex_manager.detail()
-            yandex_json_detail = self.yandex_manager.detail(json_t=True)
+            yandex_list, yandex_json_detail = self.yandex_manager.detail()
             files_dir_list = self.local_manager.dir_file_names()
-            files_dir_json = self.local_manager.get_info()
+            files_dir_json = self.local_manager.get_info(files_dir_list)
 
             self.sync_logger.info(msg="Документы в облачном хранилище: {}".format(yandex_json_detail))
             self.sync_logger.info(msg="Документы на локальном хранилище: {}".format(files_dir_json))
@@ -264,9 +266,8 @@ class SyncService:
                     )
                     count = 0
                     new_names_list = self.local_manager.dir_file_names()
-                    new_info_dict = self.local_manager.get_info()
-                    old_names_list = self.yandex_manager.detail()
-                    old_info_dict = self.yandex_manager.detail(json_t=True)
+                    new_info_dict = self.local_manager.get_info(new_names_list)
+                    old_names_list, old_info_dict = self.yandex_manager.detail()
 
                     self.sync_logger.info(
                         msg="Данные на локальном хранилище: {}".format(new_info_dict),
@@ -280,7 +281,7 @@ class SyncService:
                     )
                 else:
                     new_names_list = self.local_manager.dir_file_names()
-                    new_info_dict = self.local_manager.get_info()
+                    new_info_dict = self.local_manager.get_info(new_names_list)
                     old_names_list = self.db_manager.get_file_names()
                     old_info_dict = self.db_manager.get_info()
 
